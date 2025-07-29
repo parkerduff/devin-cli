@@ -3,7 +3,7 @@
 Allow running devin-cli as a module: python -m devin-cli
 """
 
-from devin_cli import create_session
+from devin_cli import cli
 
 if __name__ == '__main__':
-    create_session()
+    cli()

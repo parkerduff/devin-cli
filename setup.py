@@ -12,7 +12,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "devin-cli=devin_cli:create_session",
+            "devin-cli=devin_cli:cli",
         ],
     },
     python_requires=">=3.7",

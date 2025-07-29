@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "devin-cli"
-version = "1.0.0"
+version = "1.1.0"
 description = "A command line tool for creating Devin sessions"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -28,17 +28,14 @@ classifiers = [
     "Topic :: System :: Systems Administration",
 ]
 
-# Standalone version (no dependencies)
-dependencies = []
-
-[project.optional-dependencies]
-full = [
+# Enhanced version with dependencies
+dependencies = [
     "click>=8.0.0",
     "requests>=2.25.0",
 ]
 
 [project.scripts]
-devin-cli = "devin_cli_standalone:main"
+devin-cli = "devin_cli:cli"
 
 [project.urls]
 Homepage = "https://github.com/parkerduff/devin-cli"
