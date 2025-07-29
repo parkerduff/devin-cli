@@ -178,19 +178,120 @@ except SystemExit as e:
 
 
 def test_json_output_format():
-    """Test JSON output format"""
-    print("🧪 Testing JSON output format...")
+    """Test JSON output format and structure validation"""
+    print("🧪 Testing JSON output format and structure...")
     
-    env = {'DEVIN_API_KEY': 'fake_key_for_testing'}
+    # Create a test script that mocks the API response within the subprocess
+    current_dir = os.path.dirname(__file__)
+    test_script = f'''
+import sys
+import os
+import json
+from unittest.mock import patch, MagicMock
+
+os.chdir(r"{current_dir}")
+sys.path.insert(0, r"{current_dir}")
+
+# Set API key
+os.environ['DEVIN_API_KEY'] = 'test_api_key'
+
+# Mock urllib.request.urlopen
+with patch('urllib.request.urlopen') as mock_urlopen:
+    # Mock successful API response
+    mock_response = MagicMock()
+    mock_response.read.return_value = b'{{"session_id": "test-456", "url": "https://app.devin.ai/sessions/test-456", "is_new_session": false}}'
+    mock_response.__enter__.return_value = mock_response
+    mock_urlopen.return_value = mock_response
+    
+    # Import and run the CLI
+    from devin_cli_standalone import main
+    sys.argv = ['devin_cli_standalone.py', '--prompt', 'Test JSON output structure', '--output', 'json']
+    
+    try:
+        main()
+    except SystemExit as e:
+        # Expected to exit with 0 on success
+        if e.code != 0:
+            print(f"Unexpected exit code: {{e.code}}", file=sys.stderr)
+            sys.exit(e.code)
+'''
+    
+    # Write and run the test script
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(test_script)
+        test_file = f.name
+    
+    try:
+        result = subprocess.run([sys.executable, test_file], 
+                              capture_output=True, text=True, 
+                              cwd=os.path.dirname(__file__))
+        
+        # Clean up
+        os.unlink(test_file)
+        
+        assert result.returncode == 0, f"JSON output test failed: {result.stderr}"
+        
+        output_lines = result.stdout.strip().split('\n')
+        
+        # Skip the "Creating Devin session..." line and get JSON output
+        json_output = None
+        for line in output_lines:
+            if line.strip().startswith('{'):
+                json_start_idx = output_lines.index(line)
+                json_lines = output_lines[json_start_idx:]
+                json_output = '\n'.join(json_lines)
+                break
+        
+        assert json_output is not None, f"No JSON output found in stdout: {result.stdout}"
+        
+        try:
+            parsed_json = json.loads(json_output)
+        except json.JSONDecodeError as e:
+            assert False, f"Invalid JSON output: {e}\nOutput: {json_output}"
+        
+        assert isinstance(parsed_json, dict), "JSON output should be a dictionary"
+        assert 'session_id' in parsed_json, "JSON output missing 'session_id' field"
+        assert 'url' in parsed_json, "JSON output missing 'url' field"
+        assert 'is_new_session' in parsed_json, "JSON output missing 'is_new_session' field"
+        
+        assert isinstance(parsed_json['session_id'], str), "'session_id' should be a string"
+        assert isinstance(parsed_json['url'], str), "'url' should be a string"
+        assert isinstance(parsed_json['is_new_session'], bool), "'is_new_session' should be a boolean"
+        
+        assert parsed_json['session_id'] == 'test-456', f"Unexpected session_id: {parsed_json['session_id']}"
+        assert parsed_json['url'] == 'https://app.devin.ai/sessions/test-456', f"Unexpected url: {parsed_json['url']}"
+        assert parsed_json['is_new_session'] == False, f"Unexpected is_new_session: {parsed_json['is_new_session']}"
+        
+        expected_formatted = json.dumps(parsed_json, indent=2)
+        assert json_output == expected_formatted, "JSON output should be properly formatted with 2-space indentation"
+        
+        print("✅ JSON output format and structure validation works correctly")
+        
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(test_file):
+            os.unlink(test_file)
+        raise e
+
+
+def test_json_output_error_handling():
+    """Test JSON output format during API errors"""
+    print("🧪 Testing JSON output error handling...")
+    
+    # Test with missing API key (should not produce JSON output)
+    env = {'DEVIN_API_KEY': ''}
     result = run_cli_command([
-        '--prompt', 'Test JSON output',
+        '--prompt', 'Test JSON error',
         '--output', 'json'
     ], env_vars=env)
     
-    # Should fail at API call but attempt JSON output
-    assert result['returncode'] == 1, "Expected API failure"
-    assert 'Creating Devin session...' in result['stdout'], "Should reach API call stage"
-    print("✅ JSON output format option works")
+    # Should fail with missing API key
+    assert result['returncode'] == 1, "Should fail with missing API key"
+    assert 'DEVIN_API_KEY environment variable is required' in result['stdout'], "Missing proper error message"
+    
+    assert not any(line.strip().startswith('{') for line in result['stdout'].split('\n')), "Should not produce JSON output on API key error"
+    
+    print("✅ JSON output error handling works correctly")
 
 
 def test_list_parsing():
@@ -265,6 +366,7 @@ def run_all_tests():
         test_missing_api_key,
         test_argument_parsing,
         test_json_output_format,
+        test_json_output_error_handling,
         test_list_parsing,
         test_api_request_structure,
         test_interactive_mode_simulation,  # This one might be skipped
