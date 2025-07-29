@@ -66,7 +66,7 @@ def parse_list_input(value: str) -> List[str]:
     return [item.strip() for item in value.split(',') if item.strip()]
 
 
-def prompt_user(message: str, default: str = None, required: bool = False) -> str:
+def prompt_user(message: str, default: Optional[str] = None, required: bool = False) -> str:
     """Prompt user for input with optional default"""
     if default:
         prompt = f"{message} [{default}]: "
