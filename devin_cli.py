@@ -276,7 +276,7 @@ def setup(target_dir, force):
             'description': 'Devin Session Guide'
         },
         {
-            'url': f"{base_url}/.windsurf/workflows/create-session.md",
+            'url': f"{base_url}/create-session-workflow.md",
             'target_path': '.windsurf/workflows/create-session.md',
             'description': 'Create Session Workflow'
         }
