@@ -50,27 +50,56 @@ export DEVIN_API_KEY=your_token_here
 
 ## Usage
 
+### Interactive Mode (Default)
+
+By default, if you don't provide any arguments, the CLI will run in interactive mode and prompt you for all parameters:
+
+```bash
+# Interactive mode (default when no args provided)
+devin-cli
+```
+
+You can also explicitly enable interactive mode:
+
+```bash
+devin-cli -i
+# or
+devin-cli --interactive
+```
+
+### Playbook Mode (Simplified)
+
+For users who primarily work with playbooks, use the simplified `playbook` subcommand that only prompts for the essentials:
+
+```bash
+# Interactive playbook mode (prompts for playbook ID and task description only)
+devin-cli playbook
+
+# Or provide parameters directly
+devin-cli playbook --playbook-id "security-audit-v1" --prompt "Run security audit"
+```
+
 ### Command Line Flags Mode
 
-Provide all parameters via command line flags:
+Provide all parameters via command line flags to skip interactive prompts:
 
 ```bash
 # Basic usage with just a prompt
-devin --prompt "Review the pull request at https://github.com/example/repo/pull/123"
+devin-cli --prompt "Review the pull request at https://github.com/example/repo/pull/123"
 
 # With additional options
-devin --prompt "Analyze this codebase" --idempotent --unlisted --title "Code Analysis Session"
+devin-cli --prompt "Analyze this codebase" --idempotent --unlisted --title "Code Analysis Session"
 
 # With lists (comma-separated)
-devin --prompt "Deploy to production" --tags "deployment,production" --secret-ids "secret1,secret2"
+devin-cli --prompt "Deploy to production" --tags "deployment,production" --secret-ids "secret1,secret2"
 ```
 
-### Interactive Mode
+### Non-Interactive Mode (for Scripts)
 
-Use the `-i` or `--interactive` flag to be prompted for each parameter:
+Use `--non-interactive` to disable prompts entirely (useful for scripts):
 
 ```bash
-devin -i
+devin-cli --prompt "Required task" --non-interactive
 ```
 
 This will prompt you for:
@@ -97,6 +126,7 @@ devin --idempotent --unlisted
 
 - `--prompt, -p`: The task description for Devin (required)
 - `--snapshot-id`: ID of a machine snapshot to use
+- `--playbook-id`: ID of a playbook to use
 - `--unlisted`: Make the session unlisted (flag)
 - `--idempotent`: Enable idempotent session creation (flag)
 - `--max-acu-limit`: Maximum ACU limit for the session (integer)
@@ -130,22 +160,33 @@ devin --prompt "Test task" --output json
 
 ```bash
 # Simple session creation
-devin --prompt "Review PR #249"
+devin-cli --prompt "Review PR #249"
 
 # Production deployment with secrets and tags
-devin --prompt "Deploy to production" \
+devin-cli --prompt "Deploy to production" \
       --tags "deployment,production,urgent" \
       --secret-ids "aws-prod,db-prod" \
       --title "Production Deployment - v2.1.0"
+
+# Using a playbook for standardized workflows
+devin-cli --prompt "Run security audit" \
+      --playbook-id "security-audit-v1" \
+      --tags "security,audit"
 
 # Idempotent session (safe to retry)
 devin --prompt "Run tests" --idempotent
 
 # Interactive mode for complex sessions
-devin -i
+devin-cli -i
+
+# Simplified playbook mode
+devin-cli playbook --playbook-id "code-review-v2" --prompt "Review latest changes"
+
+# Interactive playbook mode
+devin-cli playbook
 
 # JSON output for scripting
-devin --prompt "Generate report" --output json | jq '.session_id'
+devin-cli --prompt "Generate report" --output json | jq '.session_id'
 ```
 
 ## Error Handling

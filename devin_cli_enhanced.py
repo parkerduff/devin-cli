@@ -257,18 +257,76 @@ def cmd_auth(args):
         sys.exit(1)
 
 
+def cmd_playbook(args):
+    """Handle the playbook subcommand - simplified interactive mode for playbook + prompt"""
+    # Always prompt for playbook_id and prompt in this mode
+    if not args.playbook_id:
+        args.playbook_id = prompt_user('Playbook ID', required=True)
+    
+    if not args.prompt:
+        args.prompt = prompt_user('Task description for Devin', required=True)
+    
+    # Build minimal payload with just the essentials
+    payload = {
+        'prompt': args.prompt,
+        'playbook_id': args.playbook_id
+    }
+    
+    try:
+        # Make the API request
+        print(f"Creating Devin session with playbook '{args.playbook_id}'...")
+        result = make_api_request(payload)
+        
+        # Output the result
+        if args.output == 'json':
+            print(json.dumps(result, indent=2))
+        else:
+            # Table format
+            print("\n✅ Session created successfully!")
+            print(f"Session ID: {result.get('session_id', 'N/A')}")
+            print(f"URL: {result.get('url', 'N/A')}")
+            print(f"Playbook: {args.playbook_id}")
+            print(f"New Session: {result.get('is_new_session', 'N/A')}")
+            
+    except DevinAPIError as e:
+        print(f"❌ Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_create(args):
     """Handle the create session subcommand"""
+    # Check if any session creation arguments were provided
+    has_args = any([
+        args.prompt, args.snapshot_id, args.playbook_id, args.unlisted, args.idempotent,
+        args.max_acu_limit, args.secret_ids, args.knowledge_ids, 
+        args.tags, args.title
+    ])
+    
+    # Default to interactive mode if no arguments provided, unless explicitly disabled
+    if not has_args and not args.non_interactive:
+        args.interactive = True
+    
+    # Override interactive mode if --non-interactive is specified
+    if args.non_interactive:
+        args.interactive = False
+    
     # Interactive mode or missing required prompt
     if args.interactive or not args.prompt:
         if not args.prompt:
             args.prompt = prompt_user('Task description for Devin', required=True)
         
-        # Only prompt for optional fields if in interactive mode
+        # Prompt for optional fields if in interactive mode
         if args.interactive:
             if not args.snapshot_id:
                 snapshot_id = prompt_user('Snapshot ID (optional)')
                 args.snapshot_id = snapshot_id if snapshot_id else None
+            
+            if not args.playbook_id:
+                playbook_id = prompt_user('Playbook ID (optional)')
+                args.playbook_id = playbook_id if playbook_id else None
             
             if not args.unlisted:
                 args.unlisted = confirm('Make session unlisted?', default=False)
@@ -299,6 +357,8 @@ def cmd_create(args):
     # Add optional parameters if provided
     if args.snapshot_id:
         payload['snapshot_id'] = args.snapshot_id
+    if args.playbook_id:
+        payload['playbook_id'] = args.playbook_id
     if args.unlisted:
         payload['unlisted'] = args.unlisted
     if args.idempotent:
@@ -352,12 +412,23 @@ def main():
     auth_parser.add_argument('--remove', action='store_true',
                            help='Remove saved authentication token')
     
+    # Playbook subcommand (simplified interactive mode)
+    playbook_parser = subparsers.add_parser('playbook', help='Create session with playbook (simplified)')
+    playbook_parser.add_argument('--playbook-id',
+                               help='ID of a playbook to use')
+    playbook_parser.add_argument('--prompt', '-p',
+                               help='The task description for Devin')
+    playbook_parser.add_argument('--output', '-o', choices=['json', 'table'], default='table',
+                               help='Output format (default: table)')
+    
     # Create subcommand (default)
     create_parser = subparsers.add_parser('create', help='Create a new Devin session')
     create_parser.add_argument('--prompt', '-p', 
                              help='The task description for Devin')
     create_parser.add_argument('--snapshot-id', 
                              help='ID of a machine snapshot to use')
+    create_parser.add_argument('--playbook-id',
+                             help='ID of a playbook to use')
     create_parser.add_argument('--unlisted', action='store_true',
                              help='Make the session unlisted')
     create_parser.add_argument('--idempotent', action='store_true',
@@ -374,6 +445,8 @@ def main():
                              help='Custom title for the session')
     create_parser.add_argument('--interactive', '-i', action='store_true',
                              help='Run in interactive mode (prompt for missing values)')
+    create_parser.add_argument('--non-interactive', action='store_true',
+                             help='Disable interactive mode (for scripts)')
     create_parser.add_argument('--output', '-o', choices=['json', 'table'], default='table',
                              help='Output format (default: table)')
     
@@ -382,6 +455,8 @@ def main():
                        help='The task description for Devin')
     parser.add_argument('--snapshot-id', 
                        help='ID of a machine snapshot to use')
+    parser.add_argument('--playbook-id',
+                       help='ID of a playbook to use')
     parser.add_argument('--unlisted', action='store_true',
                        help='Make the session unlisted')
     parser.add_argument('--idempotent', action='store_true',
@@ -398,6 +473,8 @@ def main():
                        help='Custom title for the session')
     parser.add_argument('--interactive', '-i', action='store_true',
                        help='Run in interactive mode (prompt for missing values)')
+    parser.add_argument('--non-interactive', action='store_true',
+                       help='Disable interactive mode (for scripts)')
     parser.add_argument('--output', '-o', choices=['json', 'table'], default='table',
                        help='Output format (default: table)')
     parser.add_argument('--version', action='version', version='1.1.0')
@@ -407,6 +484,8 @@ def main():
     # Handle subcommands
     if args.command == 'auth':
         cmd_auth(args)
+    elif args.command == 'playbook':
+        cmd_playbook(args)
     elif args.command == 'create':
         cmd_create(args)
     else:
