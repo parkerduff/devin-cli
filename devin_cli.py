@@ -261,7 +261,68 @@ def create(prompt, snapshot_id, unlisted, idempotent, max_acu_limit,
         sys.exit(1)
 
 
-
+@cli.command()
+@click.option('--target-dir', '-t', default='.', help='Target directory to copy files to (default: current directory)')
+@click.option('--force', '-f', is_flag=True, help='Overwrite existing files without prompting')
+def setup(target_dir, force):
+    """Download latest Devin workflow and session guide to your repository"""
+    
+    # GitHub raw URLs for the public repo
+    base_url = "https://raw.githubusercontent.com/parkerduff/devin-cli/main"
+    files_to_download = [
+        {
+            'url': f"{base_url}/devin-session-guide.md",
+            'target_path': 'devin-session-guide.md',
+            'description': 'Devin Session Guide'
+        },
+        {
+            'url': f"{base_url}/create-session.md",
+            'target_path': '.windsurf/workflows/create-session.md',
+            'description': 'Create Session Workflow'
+        }
+    ]
+    
+    target_base = Path(target_dir).resolve()
+    success_count = 0
+    
+    for file_info in files_to_download:
+        target_file = target_base / file_info['target_path']
+        
+        # Create parent directories if they don't exist
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Check if file exists and handle overwrite
+        if target_file.exists() and not force:
+            if not click.confirm(f"{file_info['description']} already exists at {target_file}. Overwrite?"):
+                click.echo(f"⏭️  Skipped {file_info['description']}")
+                continue
+        
+        # Download the file
+        try:
+            click.echo(f"📥 Downloading {file_info['description']}...")
+            response = requests.get(file_info['url'], timeout=10)
+            response.raise_for_status()
+            
+            # Write the content to file
+            with open(target_file, 'w', encoding='utf-8') as f:
+                f.write(response.text)
+            
+            click.echo(f"✅ Downloaded {file_info['description']} → {target_file}")
+            success_count += 1
+            
+        except requests.exceptions.RequestException as e:
+            click.echo(f"❌ Failed to download {file_info['description']}: {e}", err=True)
+        except Exception as e:
+            click.echo(f"❌ Error writing {file_info['description']}: {e}", err=True)
+    
+    # Summary
+    if success_count > 0:
+        click.echo(f"\n📝 Files downloaded to: {target_base}")
+        click.echo("\nYou can now use:")
+        click.echo("  • /create-session workflow in Windsurf")
+        click.echo("  • devin-session-guide.md for prompt examples")
+    elif success_count == 0:
+        click.echo("\n⚠️  No files were downloaded.")
 
 
 if __name__ == '__main__':

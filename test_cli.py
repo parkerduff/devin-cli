@@ -611,6 +611,205 @@ def test_create_interactive_mode():
     print("✅ Create command interactive mode works correctly")
 
 
+def test_setup_command_help():
+    """Test setup command help"""
+    print("🧪 Testing setup --help command...")
+    result = run_cli_command(['setup', '--help'])
+    
+    assert result['returncode'] == 0, f"Setup help command failed: {result['stderr']}"
+    assert 'Download latest Devin workflow and session guide' in result['stdout'], "Setup help text missing"
+    assert '--target-dir' in result['stdout'], "Target dir option missing from setup help"
+    assert '--force' in result['stdout'], "Force option missing from setup help"
+    print("✅ Setup help command works correctly")
+
+
+def test_setup_command_success():
+    """Test successful setup command execution"""
+    print("🧪 Testing setup command with mocked downloads...")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Mock successful HTTP responses
+        with patch('devin_cli.requests.get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.text = "# Mock file content\nThis is test content"
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+            
+            # Run setup command
+            result = run_cli_command(['setup', '--target-dir', temp_dir, '--force'])
+            
+            # Check command succeeded
+            assert result['returncode'] == 0, f"Setup command failed: {result['stderr']}"
+            assert 'Downloaded Devin Session Guide' in result['stdout'], "Should show guide download"
+            assert 'Downloaded Create Session Workflow' in result['stdout'], "Should show workflow download"
+            
+            # Check files were created
+            guide_file = Path(temp_dir) / 'devin-session-guide.md'
+            workflow_file = Path(temp_dir) / '.windsurf' / 'workflows' / 'create-session.md'
+            
+            assert guide_file.exists(), "Guide file should be created"
+            assert workflow_file.exists(), "Workflow file should be created"
+            
+            # Check file contents
+            with open(guide_file, 'r') as f:
+                content = f.read()
+                assert "Mock file content" in content, "Guide file should have correct content"
+            
+            with open(workflow_file, 'r') as f:
+                content = f.read()
+                assert "Mock file content" in content, "Workflow file should have correct content"
+            
+            # Verify correct URLs were called
+            assert mock_get.call_count == 2, "Should make 2 HTTP requests"
+            urls_called = [call[0][0] for call in mock_get.call_args_list]
+            assert any('devin-session-guide.md' in url for url in urls_called), "Should request guide file"
+            assert any('create-session.md' in url for url in urls_called), "Should request workflow file"
+    
+    print("✅ Setup command success test passed")
+
+
+def test_setup_command_network_error():
+    """Test setup command with network errors"""
+    print("🧪 Testing setup command with network errors...")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Mock network error
+        with patch('devin_cli.requests.get') as mock_get:
+            mock_get.side_effect = requests.exceptions.ConnectionError("Network error")
+            
+            # Run setup command
+            result = run_cli_command(['setup', '--target-dir', temp_dir, '--force'])
+            
+            # Command should complete but show errors
+            assert result['returncode'] == 0, f"Setup command should not crash: {result['stderr']}"
+            assert 'Failed to download' in result['stderr'], "Should show download failure"
+            assert 'No files were downloaded' in result['stdout'], "Should show no files downloaded"
+            
+            # Files should not exist
+            guide_file = Path(temp_dir) / 'devin-session-guide.md'
+            workflow_file = Path(temp_dir) / '.windsurf' / 'workflows' / 'create-session.md'
+            
+            assert not guide_file.exists(), "Guide file should not be created on error"
+            assert not workflow_file.exists(), "Workflow file should not be created on error"
+    
+    print("✅ Setup command network error test passed")
+
+
+def test_setup_command_file_exists_prompt():
+    """Test setup command behavior when files already exist"""
+    print("🧪 Testing setup command with existing files...")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create existing files
+        guide_file = Path(temp_dir) / 'devin-session-guide.md'
+        workflows_dir = Path(temp_dir) / '.windsurf' / 'workflows'
+        workflows_dir.mkdir(parents=True)
+        workflow_file = workflows_dir / 'create-session.md'
+        
+        guide_file.write_text("Existing guide content")
+        workflow_file.write_text("Existing workflow content")
+        
+        # Test with --force flag (should overwrite without prompting)
+        with patch('devin_cli.requests.get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.text = "New content from GitHub"
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+            
+            result = run_cli_command(['setup', '--target-dir', temp_dir, '--force'])
+            
+            assert result['returncode'] == 0, f"Setup with force should succeed: {result['stderr']}"
+            assert 'Downloaded Devin Session Guide' in result['stdout'], "Should download guide"
+            assert 'Downloaded Create Session Workflow' in result['stdout'], "Should download workflow"
+            
+            # Check files were overwritten
+            assert guide_file.read_text() == "New content from GitHub", "Guide should be overwritten"
+            assert workflow_file.read_text() == "New content from GitHub", "Workflow should be overwritten"
+    
+    print("✅ Setup command existing files test passed")
+
+
+def test_setup_command_directory_creation():
+    """Test that setup command creates necessary directories"""
+    print("🧪 Testing setup command directory creation...")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        target_dir = Path(temp_dir) / 'nonexistent' / 'nested' / 'path'
+        
+        with patch('devin_cli.requests.get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.text = "Test content"
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+            
+            result = run_cli_command(['setup', '--target-dir', str(target_dir), '--force'])
+            
+            assert result['returncode'] == 0, f"Setup should create directories: {result['stderr']}"
+            
+            # Check that directories were created
+            assert target_dir.exists(), "Target directory should be created"
+            workflows_dir = target_dir / '.windsurf' / 'workflows'
+            assert workflows_dir.exists(), "Workflows directory should be created"
+            
+            # Check files exist
+            guide_file = target_dir / 'devin-session-guide.md'
+            workflow_file = workflows_dir / 'create-session.md'
+            assert guide_file.exists(), "Guide file should be created"
+            assert workflow_file.exists(), "Workflow file should be created"
+    
+    print("✅ Setup command directory creation test passed")
+
+
+def test_setup_command_http_error():
+    """Test setup command with HTTP errors (404, 500, etc.)"""
+    print("🧪 Testing setup command with HTTP errors...")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with patch('devin_cli.requests.get') as mock_get:
+            # Mock HTTP error
+            mock_response = MagicMock()
+            mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("404 Not Found")
+            mock_get.return_value = mock_response
+            
+            result = run_cli_command(['setup', '--target-dir', temp_dir, '--force'])
+            
+            # Should complete but show errors
+            assert result['returncode'] == 0, f"Setup should handle HTTP errors gracefully: {result['stderr']}"
+            assert 'Failed to download' in result['stderr'], "Should show HTTP error"
+            assert 'No files were downloaded' in result['stdout'], "Should indicate no downloads"
+    
+    print("✅ Setup command HTTP error test passed")
+
+
+def test_setup_command_partial_success():
+    """Test setup command when some files succeed and others fail"""
+    print("🧪 Testing setup command with partial success...")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with patch('devin_cli.requests.get') as mock_get:
+            # First call succeeds, second fails
+            responses = [
+                MagicMock(text="Guide content", raise_for_status=MagicMock()),
+                MagicMock(raise_for_status=MagicMock(side_effect=requests.exceptions.HTTPError("404")))
+            ]
+            mock_get.side_effect = responses
+            
+            result = run_cli_command(['setup', '--target-dir', temp_dir, '--force'])
+            
+            assert result['returncode'] == 0, f"Setup should handle partial success: {result['stderr']}"
+            assert 'Downloaded Devin Session Guide' in result['stdout'], "Should show successful download"
+            assert 'Failed to download Create Session Workflow' in result['stderr'], "Should show failed download"
+            
+            # Check that successful file exists
+            guide_file = Path(temp_dir) / 'devin-session-guide.md'
+            workflow_file = Path(temp_dir) / '.windsurf' / 'workflows' / 'create-session.md'
+            
+            assert guide_file.exists(), "Guide file should be created"
+            assert not workflow_file.exists(), "Workflow file should not be created on error"
+    
+    print("✅ Setup command partial success test passed")
+
+
 def test_end_to_end_workflow():
     """Test complete workflow: save token -> create session"""
     print("🧪 Testing end-to-end workflow...")
@@ -688,6 +887,15 @@ def run_all_tests():
         test_list_parsing,
         test_edge_case_list_parsing,
         test_create_interactive_mode,
+        
+        # Setup command
+        test_setup_command_help,
+        test_setup_command_success,
+        test_setup_command_network_error,
+        test_setup_command_file_exists_prompt,
+        test_setup_command_directory_creation,
+        test_setup_command_http_error,
+        test_setup_command_partial_success,
         
         # Error handling
         test_api_error_handling,
