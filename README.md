@@ -4,40 +4,41 @@ A command line tool for creating Devin sessions via the Devin API with built-in 
 
 ## Installation
 
-### Option 1: Install from Source (Recommended)
+### Option 1: Install Directly from GitHub (Recommended)
+
+```bash
+# Install latest version directly from GitHub
+pip install git+https://github.com/parkerduff/devin-cli.git
+
+# Or install for current user only (no sudo needed)
+pip install --user git+https://github.com/parkerduff/devin-cli.git
+```
+
+### Option 2: Install from Source
 
 ```bash
 # Clone the repository
 git clone https://github.com/parkerduff/devin-cli.git
 cd devin-cli
 
-# Install using pip
+# Install globally
 pip install .
 
-# Or install in development mode
+# Or install for current user only (no sudo needed)
+pip install --user .
+
+# For development (editable install)
 pip install -e .
 ```
 
-### Option 2: Direct Download and Install
+### Verify Installation
 
 ```bash
-# Download and run the installation script
-curl -sSL https://raw.githubusercontent.com/parkerduff/devin-cli/main/manual_install.sh | bash
-```
+# Check that the command is available
+devin-cli --help
 
-### Option 3: Manual Installation (No pip required)
-
-```bash
-# Download the standalone script
-curl -O https://raw.githubusercontent.com/parkerduff/devin-cli/main/devin_cli_standalone.py
-chmod +x devin_cli_standalone.py
-
-# Use directly
-./devin_cli_standalone.py --help
-
-# Or create an alias
-echo 'alias devin-cli="python3 /path/to/devin_cli_standalone.py"' >> ~/.zshrc
-source ~/.zshrc
+# Check version
+devin-cli --version
 ```
 
 ## Authentication Setup
@@ -153,10 +154,11 @@ No user intervention required - complete end-to-end. All configuration and deplo
 
 ## Usage
 
-The CLI has two main commands:
+The CLI has three main commands:
 
 - `devin-cli auth` - Manage authentication
 - `devin-cli create` - Create Devin sessions
+- `devin-cli setup` - Download workflow templates and guides
 
 ### Creating Sessions
 
@@ -203,6 +205,30 @@ You can provide some flags and be prompted for missing required parameters:
 # Will prompt for the task description since it's required
 devin-cli create --idempotent --unlisted
 ```
+
+### Setting Up Templates
+
+The `setup` command downloads the latest workflow templates and session guide to your repository:
+
+```bash
+# Download templates to current directory
+devin-cli setup
+
+# Download to specific directory
+devin-cli setup --target-dir /path/to/project
+
+# Force overwrite existing files
+devin-cli setup --force
+```
+
+This downloads:
+- `devin-session-guide.md` - Comprehensive guide with examples and best practices
+- `.windsurf/workflows/create-session.md` - Windsurf workflow for creating sessions
+
+#### Setup Command Options
+
+- `--target-dir, -t`: Target directory to copy files to (default: current directory)
+- `--force, -f`: Overwrite existing files without prompting
 
 ## Commands and Options
 
@@ -273,6 +299,11 @@ devin-cli create
 
 # JSON output for scripting
 devin-cli create --prompt "Generate report" --output json | jq '.session_id'
+
+# Setup examples
+devin-cli setup                   # Download templates to current directory
+devin-cli setup --force          # Overwrite existing files
+devin-cli setup -t ~/my-project  # Download to specific directory
 
 # Authentication examples
 devin-cli auth                    # Set up token

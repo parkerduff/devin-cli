@@ -2,10 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name="devin-cli",
-    version="1.0.0",
-    description="A command line tool for creating Devin sessions",
+    version="1.1.0",
+    description="A command line tool for creating Devin sessions with auth management and setup utilities",
     author="Parker Duff",
     py_modules=["devin_cli"],
+    package_data={
+        "": ["*.md"],  # Include markdown files
+    },
+    include_package_data=True,
     install_requires=[
         "click>=8.0.0",
         "requests>=2.25.0",
@@ -26,5 +30,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
 )
