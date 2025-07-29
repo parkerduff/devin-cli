@@ -6,10 +6,6 @@ setup(
     description="A command line tool for creating Devin sessions with auth management and setup utilities",
     author="Parker Duff",
     py_modules=["devin_cli"],
-    package_data={
-        "": ["*.md"],  # Include markdown files
-    },
-    include_package_data=True,
     install_requires=[
         "click>=8.0.0",
         "requests>=2.25.0",
