@@ -36,9 +36,6 @@ pip install -e .
 ```bash
 # Check that the command is available
 devin-cli --help
-
-# Check version
-devin-cli --version
 ```
 
 ## Authentication Setup
