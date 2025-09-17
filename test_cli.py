@@ -53,6 +53,8 @@ def test_help_command():
     assert 'Devin CLI - Create and manage Devin sessions' in result['stdout'], "Help text missing"
     assert 'auth' in result['stdout'], "Auth subcommand missing from help"
     assert 'create' in result['stdout'], "Create subcommand missing from help"
+    assert 'get' in result['stdout'], "Get subcommand missing from help"
+    assert 'message' in result['stdout'], "Message subcommand missing from help"
     print("✅ Help command works correctly")
 
 
@@ -576,37 +578,84 @@ def test_create_interactive_mode():
     """Test create command interactive mode with all prompts"""
     print("🧪 Testing create command interactive mode...")
     
-    # Test interactive mode by verifying it handles all the prompts without crashing
-    # We'll use a simpler approach that just checks the CLI runs successfully
-    with tempfile.TemporaryDirectory() as temp_dir:
-        with patch('devin_cli.get_config_dir') as mock_config_dir:
-            mock_config_dir.return_value = Path(temp_dir)
+    # Create test script that simulates interactive prompts
+    test_script = '''
+import sys
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+sys.path.insert(0, os.path.dirname(__file__))
+from devin_cli import cli
+
+# Mock all the interactive prompts with appropriate responses
+with tempfile.TemporaryDirectory() as temp_dir:
+    with patch('devin_cli.get_config_dir') as mock_config_dir:
+        mock_config_dir.return_value = Path(temp_dir)
+        
+        # Create a test token file
+        token_file = Path(temp_dir) / 'token'
+        with open(token_file, 'w') as f:
+            f.write("interactive_test_token")
+        
+        # Mock all the click.prompt calls that would happen in interactive mode
+        with patch('click.prompt') as mock_prompt:
+            # Set up responses for all the prompts in order
+            mock_prompt.side_effect = [
+                'Test interactive prompt',  # Task description
+                '',                         # Snapshot ID (empty)
+                'n',                        # Unlisted (no)
+                'n',                        # Idempotent (no)  
+                '',                         # Max ACU limit (empty)
+                '',                         # Secret IDs (empty)
+                '',                         # Knowledge IDs (empty)
+                '',                         # Tags (empty)
+                ''                          # Title (empty)
+            ]
             
-            # Create a test token file
-            token_file = Path(temp_dir) / 'token'
-            with open(token_file, 'w') as f:
-                f.write("interactive_test_token")
-            
-            # Test that create command without --prompt triggers interactive mode
-            # We'll run it with a fake API key but expect it to fail at API call stage
-            # (not at the interactive prompting stage)
-            env = {'DEVIN_API_KEY': 'fake_interactive_test_key'}
-            
-            # This should fail at API stage, but if it gets that far, 
-            # it means interactive prompting would work
-            result = run_cli_command(['create'], env_vars=env)
-            
-            # The command should either:
-            # 1. Succeed (if it somehow works with fake key) - returncode 0
-            # 2. Fail at API call stage (after prompts) - returncode 1
-            # It should NOT fail immediately due to missing prompts
-            
-            assert result['returncode'] in [0, 1], f"Unexpected return code: {result['returncode']}. stderr: {result['stderr']}"
-            
-            # If it failed, it should be due to API issues, not prompt issues
-            if result['returncode'] == 1:
-                # Should show "Creating Devin session..." meaning it got past all prompts
-                assert 'Creating Devin session...' in result['stdout'], f"Should reach API call stage. stdout: {result['stdout']}"
+            # Mock the API call to avoid actual network request
+            with patch('devin_cli.make_api_request') as mock_api:
+                mock_api.side_effect = Exception("API call reached - interactive mode working")
+                
+                try:
+                    cli(['create'])
+                    print("ERROR: Should have failed at API call")
+                    sys.exit(1)
+                except SystemExit as e:
+                    if e.code == 1:
+                        print("SUCCESS: Interactive mode reached API call stage")
+                        sys.exit(0)  # Success - we got through all prompts
+                    else:
+                        print(f"ERROR: Wrong exit code {e.code}")
+                        sys.exit(1)
+                except Exception as e:
+                    if "API call reached" in str(e):
+                        print("SUCCESS: Interactive mode reached API call stage")
+                        sys.exit(0)  # Success - we got through all prompts
+                    else:
+                        print(f"ERROR: Unexpected exception {e}")
+                        sys.exit(1)
+'''
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(test_script)
+        test_file = f.name
+    
+    try:
+        result = subprocess.run(
+            [sys.executable, test_file],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(__file__)
+        )
+        
+        # Should succeed (exit code 0) and show success message
+        assert result.returncode == 0, f"Interactive mode test failed. stdout: {result.stdout}, stderr: {result.stderr}"
+        assert "SUCCESS: Interactive mode reached API call stage" in result.stdout, f"Interactive mode didn't work correctly. stdout: {result.stdout}"
+        
+    finally:
+        os.unlink(test_file)
     
     print("✅ Create command interactive mode works correctly")
 
@@ -858,6 +907,257 @@ def test_end_to_end_workflow():
     print("✅ End-to-end workflow works correctly")
 
 
+def test_get_command_help():
+    """Test get command help"""
+    print("🧪 Testing get --help command...")
+    result = run_cli_command(['get', '--help'])
+    
+    assert result['returncode'] == 0, f"Get help command failed: {result['stderr']}"
+    assert 'Get details of an existing Devin session' in result['stdout'], "Get help text missing"
+    assert '--output' in result['stdout'], "Output option missing from get help"
+    print("✅ Get help command works correctly")
+
+
+def test_get_command_success():
+    """Test successful get command execution"""
+    print("🧪 Testing get command with mocked API response...")
+    
+    # Import the get_session_details function
+    sys.path.insert(0, os.path.dirname(__file__))
+    from devin_cli import get_session_details
+    
+    # Mock successful API response
+    with patch('devin_cli.requests.get') as mock_get:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "session_id": "test-session-123",
+            "status": "active",
+            "title": "Test Session",
+            "created_at": "2024-01-01T12:00:00Z",
+            "updated_at": "2024-01-01T13:00:00Z",
+            "tags": ["test", "api"],
+            "messages": [
+                {"role": "user", "content": "Test message 1"},
+                {"role": "assistant", "content": "Test response 1"}
+            ]
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+        
+        # Set API key via environment
+        with patch.dict(os.environ, {'DEVIN_API_KEY': 'test_api_key'}):
+            result = get_session_details("test-session-123")
+            
+            # Verify the request was made correctly
+            mock_get.assert_called_once()
+            call_args = mock_get.call_args[0]
+            call_kwargs = mock_get.call_args[1]
+            
+            assert call_args[0] == 'https://api.devin.ai/v1/sessions/test-session-123'
+            assert call_kwargs['headers']['Authorization'] == 'Bearer test_api_key'
+            assert call_kwargs['headers']['Content-Type'] == 'application/json'
+            
+            # Verify response parsing
+            assert result['session_id'] == 'test-session-123'
+            assert result['status'] == 'active'
+            assert result['title'] == 'Test Session'
+    
+    print("✅ Get command API structure is correct")
+
+
+def test_get_command_cli_execution():
+    """Test get command CLI execution"""
+    print("🧪 Testing get command CLI execution...")
+    
+    env = {'DEVIN_API_KEY': 'fake_key_for_testing'}
+    result = run_cli_command([
+        'get', 'test-session-123',
+        '--output', 'json'
+    ], env_vars=env)
+    
+    # Should fail at API call but reach that stage
+    assert result['returncode'] == 1, "Expected API failure"
+    assert 'Retrieving session details for test-session-123...' in result['stdout'], "Should reach API call stage"
+    print("✅ Get command CLI execution works")
+
+
+def test_message_command_help():
+    """Test message command help"""
+    print("🧪 Testing message --help command...")
+    result = run_cli_command(['message', '--help'])
+    
+    assert result['returncode'] == 0, f"Message help command failed: {result['stderr']}"
+    assert 'Send a message to an existing Devin session' in result['stdout'], "Message help text missing"
+    assert '--message' in result['stdout'], "Message option missing from message help"
+    assert '--output' in result['stdout'], "Output option missing from message help"
+    print("✅ Message help command works correctly")
+
+
+def test_message_command_success():
+    """Test successful message command execution"""
+    print("🧪 Testing message command with mocked API response...")
+    
+    # Import the send_message_to_session function
+    sys.path.insert(0, os.path.dirname(__file__))
+    from devin_cli import send_message_to_session
+    
+    # Mock successful API response
+    with patch('devin_cli.requests.post') as mock_post:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "message_id": "msg-123",
+            "status": "sent"
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+        
+        # Set API key via environment
+        with patch.dict(os.environ, {'DEVIN_API_KEY': 'test_api_key'}):
+            payload = {'message': 'Test message'}
+            result = send_message_to_session("test-session-123", payload)
+            
+            # Verify the request was made correctly
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args[0]
+            call_kwargs = mock_post.call_args[1]
+            
+            assert call_args[0] == 'https://api.devin.ai/v1/sessions/test-session-123/message'
+            assert call_kwargs['headers']['Authorization'] == 'Bearer test_api_key'
+            assert call_kwargs['headers']['Content-Type'] == 'application/json'
+            assert call_kwargs['json'] == payload
+            
+            # Verify response parsing
+            assert result['message_id'] == 'msg-123'
+            assert result['status'] == 'sent'
+    
+    print("✅ Message command API structure is correct")
+
+
+def test_message_command_cli_execution():
+    """Test message command CLI execution"""
+    print("🧪 Testing message command CLI execution...")
+    
+    env = {'DEVIN_API_KEY': 'fake_key_for_testing'}
+    result = run_cli_command([
+        'message', 'test-session-123',
+        '--message', 'Test message',
+        '--output', 'json'
+    ], env_vars=env)
+    
+    # Should fail at API call but reach that stage
+    assert result['returncode'] == 1, "Expected API failure"
+    assert 'Sending message to session test-session-123...' in result['stdout'], "Should reach API call stage"
+    print("✅ Message command CLI execution works")
+
+
+def test_message_command_interactive():
+    """Test message command interactive mode (when no --message provided)"""
+    print("🧪 Testing message command interactive mode...")
+    
+    # Create test script that simulates interactive message input
+    test_script = '''
+import sys
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, os.path.dirname(__file__))
+from devin_cli import cli
+
+with tempfile.TemporaryDirectory() as temp_dir:
+    with patch('devin_cli.get_config_dir') as mock_config_dir:
+        mock_config_dir.return_value = Path(temp_dir)
+        
+        # Create a test token file
+        token_file = Path(temp_dir) / 'token'
+        with open(token_file, 'w') as f:
+            f.write("interactive_test_token")
+        
+        # Mock the click.prompt for message input
+        with patch('click.prompt') as mock_prompt:
+            mock_prompt.return_value = "Test interactive message"
+            
+            # Mock the API call to avoid actual network request
+            with patch('devin_cli.send_message_to_session') as mock_send:
+                mock_send.side_effect = Exception("API call reached - interactive message working")
+                
+                try:
+                    cli(['message', 'test-session-123'])
+                    print("ERROR: Should have failed at API call")
+                    sys.exit(1)
+                except SystemExit as e:
+                    if e.code == 1:
+                        print("SUCCESS: Interactive message mode reached API call stage")
+                        sys.exit(0)
+                    else:
+                        print(f"ERROR: Wrong exit code {e.code}")
+                        sys.exit(1)
+                except Exception as e:
+                    if "API call reached" in str(e):
+                        print("SUCCESS: Interactive message mode reached API call stage")
+                        sys.exit(0)
+                    else:
+                        print(f"ERROR: Unexpected exception {e}")
+                        sys.exit(1)
+'''
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(test_script)
+        test_file = f.name
+    
+    try:
+        result = subprocess.run(
+            [sys.executable, test_file],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(__file__)
+        )
+        
+        # Should succeed (exit code 0) and show success message
+        assert result.returncode == 0, f"Interactive message test failed. stdout: {result.stdout}, stderr: {result.stderr}"
+        assert "SUCCESS: Interactive message mode reached API call stage" in result.stdout, f"Interactive message mode didn't work correctly. stdout: {result.stdout}"
+        
+    finally:
+        os.unlink(test_file)
+    
+    print("✅ Message command interactive mode works correctly")
+
+
+def test_get_and_message_api_error_handling():
+    """Test API error handling for get and message commands"""
+    print("🧪 Testing API error handling for new commands...")
+    
+    sys.path.insert(0, os.path.dirname(__file__))
+    from devin_cli import get_session_details, send_message_to_session, DevinAPIError
+    
+    # Test get command network error
+    with patch('devin_cli.requests.get') as mock_get:
+        mock_get.side_effect = requests.exceptions.Timeout("Request timed out")
+        
+        with patch.dict(os.environ, {'DEVIN_API_KEY': 'test_token'}):
+            try:
+                get_session_details('test-session-123')
+                assert False, "Should have raised DevinAPIError"
+            except DevinAPIError as e:
+                assert "Request timed out" in str(e), f"Should contain timeout message. Got: {e}"
+    
+    # Test message command HTTP error
+    with patch('devin_cli.requests.post') as mock_post:
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("HTTP 500 Error")
+        mock_post.return_value = mock_response
+        
+        with patch.dict(os.environ, {'DEVIN_API_KEY': 'test_token'}):
+            try:
+                send_message_to_session('test-session-123', {'message': 'test'})
+                assert False, "Should have raised DevinAPIError"
+            except DevinAPIError as e:
+                assert "HTTP 500 Error" in str(e), f"Should contain HTTP error message. Got: {e}"
+    
+    print("✅ API error handling for new commands works correctly")
+
+
 def run_all_tests():
     """Run all tests"""
     print("🚀 Starting comprehensive CLI tests...\n")
@@ -869,6 +1169,8 @@ def run_all_tests():
         test_no_subcommand_shows_help,
         test_auth_help,
         test_create_help,
+        test_get_command_help,
+        test_message_command_help,
         
         # Auth functionality
         test_auth_command_interactive,
@@ -887,6 +1189,14 @@ def run_all_tests():
         test_list_parsing,
         test_edge_case_list_parsing,
         test_create_interactive_mode,
+        
+        # New session management commands
+        test_get_command_success,
+        test_get_command_cli_execution,
+        test_message_command_success,
+        test_message_command_cli_execution,
+        test_message_command_interactive,
+        test_get_and_message_api_error_handling,
         
         # Setup command
         test_setup_command_help,

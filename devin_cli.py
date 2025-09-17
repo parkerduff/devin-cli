@@ -123,6 +123,49 @@ def make_api_request(payload: dict) -> dict:
         raise DevinAPIError(f"API request failed: {e}")
 
 
+def get_session_details(session_id: str) -> dict:
+    """Get details of an existing Devin session"""
+    api_key = get_api_key()
+    
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        response = requests.get(
+            f'https://api.devin.ai/v1/sessions/{session_id}',
+            headers=headers,
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        raise DevinAPIError(f"API request failed: {e}")
+
+
+def send_message_to_session(session_id: str, payload: dict) -> dict:
+    """Send a message to an existing Devin session"""
+    api_key = get_api_key()
+    
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        response = requests.post(
+            f'https://api.devin.ai/v1/sessions/{session_id}/message',
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        raise DevinAPIError(f"API request failed: {e}")
+
+
 def parse_list_input(value: str) -> List[str]:
     """Parse comma-separated string into list"""
     if not value:
@@ -253,6 +296,82 @@ def create(prompt, snapshot_id, unlisted, idempotent, max_acu_limit,
             click.echo(f"URL: {result.get('url', 'N/A')}")
             click.echo(f"New Session: {result.get('is_new_session', 'N/A')}")
             
+    except DevinAPIError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Unexpected error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument('session_id')
+@click.option('--output', '-o', type=click.Choice(['json', 'table']), default='table', help='Output format')
+def get(session_id, output):
+    """Get details of an existing Devin session"""
+    try:
+        click.echo(f"Retrieving session details for {session_id}...")
+        result = get_session_details(session_id)
+        
+        # Output the result
+        if output == 'json':
+            click.echo(json.dumps(result, indent=2))
+        else:
+            # Table format
+            click.echo("\n📄 Session Details:")
+            click.echo(f"Session ID: {result.get('session_id', 'N/A')}")
+            click.echo(f"Status: {result.get('status', 'N/A')}")
+            click.echo(f"Title: {result.get('title', 'N/A')}")
+            click.echo(f"Created: {result.get('created_at', 'N/A')}")
+            click.echo(f"Updated: {result.get('updated_at', 'N/A')}")
+            
+            if result.get('tags'):
+                click.echo(f"Tags: {', '.join(result['tags'])}")
+            
+            messages = result.get('messages', [])
+            if messages:
+                click.echo(f"\n💬 Messages ({len(messages)} total):")
+                for i, msg in enumerate(messages[:3]):  # Show first 3 messages
+                    click.echo(f"  {i+1}. {msg.get('role', 'unknown')}: {msg.get('content', '')[:100]}...")
+                if len(messages) > 3:
+                    click.echo(f"  ... and {len(messages) - 3} more messages")
+                    
+    except DevinAPIError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Unexpected error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument('session_id')
+@click.option('--message', '-m', help='Message to send to the session')
+@click.option('--output', '-o', type=click.Choice(['json', 'table']), default='table', help='Output format')
+def message(session_id, message, output):
+    """Send a message to an existing Devin session"""
+    
+    # If no message provided, prompt for it
+    if not message:
+        message = click.prompt('Message to send to the session', type=str)
+    
+    payload = {'message': message}
+    
+    try:
+        click.echo(f"Sending message to session {session_id}...")
+        result = send_message_to_session(session_id, payload)
+        
+        # Output the result
+        if output == 'json':
+            click.echo(json.dumps(result, indent=2))
+        else:
+            # Table format
+            click.echo("\n✅ Message sent successfully!")
+            if 'message_id' in result:
+                click.echo(f"Message ID: {result['message_id']}")
+            if 'status' in result:
+                click.echo(f"Session Status: {result['status']}")
+                
     except DevinAPIError as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)

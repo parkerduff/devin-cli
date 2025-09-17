@@ -64,7 +64,7 @@ The CLI will automatically use the environment variable if available, or fall ba
 
 ## Important Note: Playbooks
 
-**⚠️ Playbooks are not currently supported via CLI** - The `playbook_id` parameter is not functional at this time. Instead, you should create thorough, detailed prompts that include all necessary information for Devin to complete your task successfully.
+**⚠️ Playbooks via CLI** - While the CLI doesn't directly support playbook selection, you can include playbook macros in your prompt by adding the macro command (like `!playbook`) directly in your `--prompt` parameter. This allows you to leverage playbook functionality in CLI sessions.
 
 ### Creating Effective Prompts
 
@@ -151,10 +151,12 @@ No user intervention required - complete end-to-end. All configuration and deplo
 
 ## Usage
 
-The CLI has three main commands:
+The CLI has five main commands:
 
 - `devin-cli auth` - Manage authentication
 - `devin-cli create` - Create Devin sessions
+- `devin-cli get` - Get details of existing Devin sessions
+- `devin-cli message` - Send messages to existing Devin sessions
 - `devin-cli setup` - Download workflow templates and guides
 
 ### Creating Sessions
@@ -202,6 +204,45 @@ You can provide some flags and be prompted for missing required parameters:
 # Will prompt for the task description since it's required
 devin-cli create --idempotent --unlisted
 ```
+
+### Getting Session Details
+
+Use the `get` command to retrieve information about an existing Devin session:
+
+```bash
+# Get session details in table format (default)
+devin-cli get devin-session-123
+
+# Get session details in JSON format
+devin-cli get devin-session-123 --output json
+```
+
+The `get` command displays:
+- Session ID and status
+- Session title and timestamps
+- Associated tags
+- Recent messages (first 3 messages shown in table format, all messages in JSON format)
+
+### Sending Messages to Sessions
+
+Use the `message` command to send a message to an existing Devin session:
+
+```bash
+# Send a message interactively (will prompt for message)
+devin-cli message devin-session-123
+
+# Send a message directly via command line
+devin-cli message devin-session-123 --message "Please review the latest changes"
+
+# Send a message and get JSON response
+devin-cli message devin-session-123 --message "Run tests" --output json
+```
+
+The `message` command:
+- Accepts the session ID as a required argument
+- Prompts for the message if `--message` is not provided
+- Confirms successful message delivery
+- Returns message ID and session status
 
 ### Setting Up Templates
 
@@ -254,6 +295,17 @@ For the `devin-cli create` command:
 - `--title`: Custom title for the session
 - `--output, -o`: Output format (`json` or `table`, default: `table`)
 
+### Session Management Options
+
+For the `devin-cli get` command:
+- `SESSION_ID`: The ID of the session to retrieve (required)
+- `--output, -o`: Output format (`json` or `table`, default: `table`)
+
+For the `devin-cli message` command:
+- `SESSION_ID`: The ID of the session to send a message to (required)
+- `--message, -m`: The message to send (will be prompted if not provided)
+- `--output, -o`: Output format (`json` or `table`, default: `table`)
+
 ### Global Options
 
 - `--version`: Show version information
@@ -296,6 +348,12 @@ devin-cli create
 
 # JSON output for scripting
 devin-cli create --prompt "Generate report" --output json | jq '.session_id'
+
+# Session management examples
+devin-cli get devin-session-123                    # Get session details
+devin-cli get devin-session-123 --output json     # Get details as JSON
+devin-cli message devin-session-123               # Send message interactively
+devin-cli message devin-session-123 --message "Please continue with the implementation"
 
 # Setup examples
 devin-cli setup                   # Download templates to current directory
